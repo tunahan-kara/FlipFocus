@@ -11,6 +11,10 @@ A minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap 
 - Always-on-top mode
 - Adjustable opacity
 - Compact mode (double-click or press `C`)
+- Optional seconds display
+- 12 / 24-hour clock switch
+- Lock-position mode
+- Start with Windows toggle
 - Auto-hiding controls for a cleaner desktop look
 - System tray icon; closing the window hides it to tray
 - Persistent window position, size and preferences
@@ -64,7 +68,6 @@ Pushing a version tag such as `v0.2.0` also creates a GitHub Release and attache
 - Theme presets
 - Start with Windows toggle
 - Optional custom notification sounds
-- Lock position
 - Installer build
 
 ## License
