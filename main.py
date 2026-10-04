@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 APP_NAME = "FlipFocus"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 ORG_NAME = "OrcaApps"
 
 TR = {
@@ -107,6 +107,60 @@ def app_icon() -> QIcon:
     p.end()
     return QIcon(pix)
 
+
+
+class ResizeHandle(QWidget):
+    """Visible bottom-right resize grip with its own mouse handling."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.host = parent
+        self.dragging = False
+        self.start_global = QPoint()
+        self.start_size = QSize()
+        self.setFixedSize(28, 28)
+        self.setCursor(Qt.SizeFDiagCursor)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.hide()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(QPen(QColor(247, 247, 249, 170), 1.8))
+        p.drawLine(7, 21, 21, 7)
+        p.drawLine(12, 21, 21, 12)
+        p.end()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and not self.host.lock_position:
+            self.dragging = True
+            self.start_global = event.globalPosition().toPoint()
+            self.start_size = self.host.size()
+            self.grabMouse()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if not self.dragging:
+            return
+        delta = event.globalPosition().toPoint() - self.start_global
+        new_w = max(
+            self.host.MIN_SIZE.width(),
+            min(self.host.MAX_SIZE.width(), self.start_size.width() + delta.x()),
+        )
+        new_h = max(
+            self.host.MIN_SIZE.height(),
+            min(self.host.MAX_SIZE.height(), self.start_size.height() + delta.y()),
+        )
+        self.host.resize(new_w, new_h)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if self.dragging and event.button() == Qt.LeftButton:
+            self.dragging = False
+            self.releaseMouse()
+            self.host.settings.setValue("window_size", self.host.size())
+            self.host.hide_timer.start()
+            event.accept()
 
 class DigitCard(QWidget):
     """Split-flap digit with a downward calendar-style page drop."""
@@ -421,6 +475,10 @@ class FlipFocus(QWidget):
         self._apply_window_flags()
 
         self._build_ui()
+
+        self.resize_handle = ResizeHandle(self)
+        self._position_resize_handle()
+
         self._setup_tray()
 
         pos = self.settings.value("pos")
@@ -593,19 +651,42 @@ class FlipFocus(QWidget):
 
     def enterEvent(self, event):
         self.show_controls()
+        self._show_resize_handle()
         self.hide_timer.start()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.resizing:
+        if not self.resizing and not self.resize_handle.dragging:
             self.resize_hot = False
             self.setCursor(Qt.ArrowCursor)
+            self.resize_handle.hide()
             self.update()
             self.hide_timer.start()
         super().leaveEvent(event)
 
+    def _position_resize_handle(self):
+        if hasattr(self, "resize_handle"):
+            self.resize_handle.move(
+                self.width() - self.resize_handle.width() - 3,
+                self.height() - self.resize_handle.height() - 3,
+            )
+            self.resize_handle.raise_()
+
+    def _show_resize_handle(self):
+        if not hasattr(self, "resize_handle"):
+            return
+        self._position_resize_handle()
+        if not self.lock_position:
+            self.resize_handle.show()
+            self.resize_handle.raise_()
+
+    def resizeEvent(self, event):
+        self._position_resize_handle()
+        super().resizeEvent(event)
+
     def show_controls(self):
         if self.compact_mode:
+            self._show_resize_handle()
             return
         if not self.controls_visible:
             self.controls_visible = True
@@ -810,6 +891,10 @@ class FlipFocus(QWidget):
     def toggle_lock_position(self):
         self.lock_position = not self.lock_position
         self.settings.setValue("lock_position", self.lock_position)
+        if self.lock_position:
+            self.resize_handle.hide()
+        else:
+            self._show_resize_handle()
 
     def startup_enabled(self):
         if sys.platform != "win32":
@@ -1002,6 +1087,7 @@ class FlipFocus(QWidget):
             event.accept()
 
     def mouseMoveEvent(self, event):
+        self._show_resize_handle()
         pos = event.position().toPoint()
 
         if self.resizing:
