@@ -31,6 +31,9 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Syntax check
+        run: python -m py_compile main.py
+
       - name: Build executable
         run: pyinstaller --noconfirm --clean --windowed --onefile --name FlipFocus main.py
 
@@ -39,6 +42,7 @@ jobs:
         with:
           name: FlipFocus-Windows
           path: dist/FlipFocus.exe
+          if-no-files-found: error
 
       - name: Create GitHub release for tag
         if: startsWith(github.ref, 'refs/tags/v')
