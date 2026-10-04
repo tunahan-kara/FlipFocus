@@ -32,7 +32,17 @@ def draw_icon(size: int) -> Image.Image:
     d.rounded_rectangle((s(26), s(30), s(38), s(35)), radius=s(2), fill=white)
     return im
 
-sizes = [16, 24, 32, 48, 64, 128, 256]
-images = [draw_icon(size) for size in sizes]
-images[-1].save(OUT, format="ICO", sizes=[(s, s) for s in sizes], append_images=images[:-1])
-print(f"Created {OUT}")
+# Pillow's ICO writer reliably derives all requested sizes from one 256px source.
+base = draw_icon(256)
+sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+base.save(OUT, format="ICO", sizes=sizes)
+
+# Fail the build if the ICO is not actually readable with the expected frames.
+check = Image.open(OUT)
+available = set(check.ico.sizes())
+required = {(16, 16), (32, 32), (48, 48), (256, 256)}
+missing = required - available
+if missing:
+    raise RuntimeError(f"ICO is missing sizes: {sorted(missing)}")
+
+print(f"Created {OUT} with sizes: {sorted(available)}")
