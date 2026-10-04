@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 APP_NAME = "FlipFocus"
-APP_VERSION = "0.4.1"
+APP_VERSION = "1.0.0"
 ORG_NAME = "OrcaApps"
 
 TR = {
@@ -47,6 +47,9 @@ TR = {
     "english": "English",
     "turkish": "Türkçe",
     "hide_to_tray": "Sistem tepsisine gizle",
+    "close_to_tray": "Çarpıya basınca arka planda çalıştır",
+    "pomodoro_done": "Odak süresi tamamlandı",
+    "break_done": "Mola tamamlandı",
     "focus_min": "Odak (dk)",
     "short_break_min": "Kısa mola (dk)",
     "long_break_min": "Uzun mola (dk)",
@@ -80,6 +83,9 @@ EN = {
     "english": "English",
     "turkish": "Türkçe",
     "hide_to_tray": "Hide to tray",
+    "close_to_tray": "Keep running in tray when closed",
+    "pomodoro_done": "Focus session complete",
+    "break_done": "Break complete",
     "focus_min": "Focus (min)",
     "short_break_min": "Short break (min)",
     "long_break_min": "Long break (min)",
@@ -439,6 +445,7 @@ class FlipFocus(QWidget):
         self.show_seconds = self.settings.value("show_seconds", True, type=bool)
         self.use_24h = self.settings.value("use_24h", True, type=bool)
         self.lock_position = self.settings.value("lock_position", False, type=bool)
+        self.close_to_tray = self.settings.value("close_to_tray", False, type=bool)
 
         self.focus_minutes = int(self.settings.value("focus_minutes", 25))
         self.short_break_minutes = int(self.settings.value("short_break_minutes", 5))
@@ -453,6 +460,8 @@ class FlipFocus(QWidget):
         self.resizing = False
         self.resize_start_global = QPoint()
         self.resize_start_size = QSize()
+        saved_normal_size = self.settings.value("normal_window_size")
+        self.normal_window_size = saved_normal_size if saved_normal_size else self.NORMAL_SIZE
 
         self.stopwatch_running = False
         self.stopwatch_elapsed = 0.0
@@ -484,12 +493,13 @@ class FlipFocus(QWidget):
         pos = self.settings.value("pos")
         saved_size = self.settings.value("window_size")
         if saved_size and not self.compact_mode:
+            self.normal_window_size = saved_size
             self.resize(saved_size)
         if pos:
             self.move(pos)
 
         self.tick_timer = QTimer(self)
-        self.tick_timer.setInterval(100)
+        self.tick_timer.setInterval(250)
         self.tick_timer.timeout.connect(self.tick)
         self.tick_timer.start()
 
@@ -564,7 +574,7 @@ class FlipFocus(QWidget):
 
         self.close_btn = QPushButton("×")
         self.close_btn.setFixedSize(30, 28)
-        self.close_btn.clicked.connect(self.hide)
+        self.close_btn.clicked.connect(self.handle_close_button)
         top.addWidget(self.close_btn)
         self.root.addWidget(self.top_bar)
 
@@ -621,7 +631,9 @@ class FlipFocus(QWidget):
         self.btn_clock.setText(self.t["clock"])
         self.btn_stopwatch.setText(self.t["stopwatch"])
         self.btn_pomodoro.setText(self.t["pomodoro"])
-        self.close_btn.setToolTip(self.t["hide_to_tray"])
+        self.close_btn.setToolTip(
+            self.t["hide_to_tray"] if self.close_to_tray else self.t["quit"]
+        )
         self.reset_btn.setText(self.t["reset"])
         self.rebuild_tray_menu()
         self.update_mode_ui()
@@ -643,11 +655,25 @@ class FlipFocus(QWidget):
         self.activateWindow()
         self.show_controls()
 
+    def handle_close_button(self):
+        if self.close_to_tray and self.tray is not None:
+            self.hide()
+        else:
+            self.quit_app()
+
     def quit_app(self):
         self.force_quit = True
+        self._save_window_state()
         if self.tray:
             self.tray.hide()
         QApplication.quit()
+
+    def toggle_close_to_tray(self):
+        self.close_to_tray = not self.close_to_tray
+        self.settings.setValue("close_to_tray", self.close_to_tray)
+        self.close_btn.setToolTip(
+            self.t["hide_to_tray"] if self.close_to_tray else self.t["quit"]
+        )
 
     def enterEvent(self, event):
         self.show_controls()
@@ -702,6 +728,9 @@ class FlipFocus(QWidget):
         self.update()
 
     def toggle_compact(self):
+        if not self.compact_mode:
+            self.normal_window_size = self.size()
+            self.settings.setValue("normal_window_size", self.normal_window_size)
         self.compact_mode = not self.compact_mode
         self.settings.setValue("compact_mode", self.compact_mode)
         self._apply_compact_mode()
@@ -721,10 +750,11 @@ class FlipFocus(QWidget):
             self.display.set_seconds_visible(self.show_seconds)
             self.root.setContentsMargins(12, 10, 12, 10)
             if initial:
-                saved_size = self.settings.value("window_size")
-                self.resize(saved_size if saved_size else self.NORMAL_SIZE)
-            elif self.size().width() < self.MIN_SIZE.width():
-                self.resize(self.NORMAL_SIZE)
+                saved_size = self.settings.value("normal_window_size")
+                self.normal_window_size = saved_size if saved_size else self.normal_window_size
+                self.resize(self.normal_window_size)
+            else:
+                self.resize(self.normal_window_size)
             self.hide_timer.start()
 
     def set_mode(self, mode):
@@ -802,8 +832,17 @@ class FlipFocus(QWidget):
 
                 if self.pomodoro_remaining <= 0:
                     QApplication.beep()
+                    completed_was_break = self.pomodoro_is_break
                     self.pomodoro_running = False
                     self._advance_pomodoro_phase()
+                    if self.tray is not None:
+                        title = APP_NAME
+                        message = (
+                            self.t["break_done"]
+                            if completed_was_break
+                            else self.t["pomodoro_done"]
+                        )
+                        self.tray.showMessage(title, message, app_icon(), 3500)
                     self.update_mode_ui()
 
         total = int(self.pomodoro_remaining)
@@ -991,6 +1030,11 @@ class FlipFocus(QWidget):
         format_action.triggered.connect(self.toggle_time_format)
         menu.addAction(format_action)
 
+        close_action = QAction(self.t["close_to_tray"], self, checkable=True)
+        close_action.setChecked(self.close_to_tray)
+        close_action.triggered.connect(self.toggle_close_to_tray)
+        menu.addAction(close_action)
+
         if sys.platform == "win32":
             startup_action = QAction(self.t["start_windows"], self, checkable=True)
             startup_action.setChecked(self.startup_enabled())
@@ -1120,11 +1164,38 @@ class FlipFocus(QWidget):
     def mouseReleaseEvent(self, event):
         if self.resizing and event.button() == Qt.LeftButton:
             self.resizing = False
-            self.settings.setValue("window_size", self.size())
-            self.hide_timer.start()
+            self.host.settings.setValue("window_size", self.host.size())
+            if not self.host.compact_mode:
+                self.host.normal_window_size = self.host.size()
+                self.host.settings.setValue("normal_window_size", self.host.normal_window_size)
+            self.host.hide_timer.start()
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def showEvent(self, event):
+        if hasattr(self, "tick_timer"):
+            self.tick_timer.setInterval(250)
+            if not self.tick_timer.isActive():
+                self.tick_timer.start()
+            self.tick(first=True)
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        if hasattr(self, "tick_timer"):
+            if self.pomodoro_running:
+                self.tick_timer.setInterval(1000)
+            else:
+                self.tick_timer.stop()
+        super().hideEvent(event)
+
+    def _save_window_state(self):
+        self.settings.setValue("pos", self.pos())
+        if not self.compact_mode:
+            self.normal_window_size = self.size()
+            self.settings.setValue("window_size", self.size())
+            self.settings.setValue("normal_window_size", self.normal_window_size)
+        self.settings.sync()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Space and self.mode != "clock":
@@ -1140,25 +1211,30 @@ class FlipFocus(QWidget):
             event.accept()
             return
         if event.key() == Qt.Key_Escape:
-            self.hide()
+            if self.tray is not None:
+                self.hide()
+            else:
+                self.close()
             event.accept()
             return
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        self.settings.setValue("pos", self.pos())
-        if not self.compact_mode:
-            self.settings.setValue("window_size", self.size())
-        self.settings.sync()
+        self._save_window_state()
 
         if self.force_quit:
             event.accept()
             return
-        if self.tray is not None and self.tray.isVisible():
+
+        if self.close_to_tray and self.tray is not None and self.tray.isVisible():
             self.hide()
             event.ignore()
             return
+
+        if self.tray:
+            self.tray.hide()
         event.accept()
+        QTimer.singleShot(0, QApplication.quit)
 
 
 if __name__ == "__main__":
@@ -1167,7 +1243,7 @@ if __name__ == "__main__":
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName(ORG_NAME)
     app.setWindowIcon(app_icon())
-    app.setQuitOnLastWindowClosed(False)
+    app.setQuitOnLastWindowClosed(True)
 
     window = FlipFocus()
     window.show()
