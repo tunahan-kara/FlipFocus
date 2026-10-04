@@ -95,24 +95,39 @@ EN = {
 
 
 def app_icon() -> QIcon:
+    """Runtime icon matching the packaged split-flap app mark."""
     pix = QPixmap(64, 64)
     pix.fill(Qt.transparent)
     p = QPainter(pix)
     p.setRenderHint(QPainter.Antialiasing)
 
-    bg = QLinearGradient(8, 8, 56, 56)
-    bg.setColorAt(0.0, QColor(46, 46, 51))
-    bg.setColorAt(1.0, QColor(18, 18, 21))
-    p.setBrush(bg)
+    outer = QLinearGradient(6, 6, 58, 58)
+    outer.setColorAt(0.0, QColor(47, 47, 52))
+    outer.setColorAt(1.0, QColor(13, 13, 16))
+    p.setBrush(outer)
     p.setPen(Qt.NoPen)
-    p.drawRoundedRect(6, 6, 52, 52, 14, 14)
+    p.drawRoundedRect(4, 4, 56, 56, 15, 15)
 
-    p.setPen(QColor(248, 248, 250))
-    p.setFont(QFont("Segoe UI Variable Display", 25, QFont.Bold))
-    p.drawText(pix.rect(), Qt.AlignCenter, "F")
+    card = QLinearGradient(14, 13, 14, 51)
+    card.setColorAt(0.0, QColor(54, 54, 59))
+    card.setColorAt(0.50, QColor(34, 34, 38))
+    card.setColorAt(1.0, QColor(22, 22, 25))
+    p.setBrush(card)
+    p.setPen(QPen(QColor(255, 255, 255, 18), 1))
+    p.drawRoundedRect(13, 12, 38, 40, 8, 8)
+
+    p.setPen(QPen(QColor(7, 7, 9, 210), 2))
+    p.drawLine(16, 32, 48, 32)
+
+    # Stylized F, drawn geometrically so the logo is font-independent.
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(247, 247, 249))
+    p.drawRoundedRect(23, 20, 6, 25, 2, 2)
+    p.drawRoundedRect(26, 20, 16, 6, 2, 2)
+    p.drawRoundedRect(26, 30, 12, 5, 2, 2)
+
     p.end()
     return QIcon(pix)
-
 
 
 class ResizeHandle(QWidget):
@@ -844,6 +859,8 @@ class FlipFocus(QWidget):
                         )
                         self.tray.showMessage(title, message, app_icon(), 3500)
                     self.update_mode_ui()
+                    if not self.isVisible():
+                        self.tick_timer.stop()
 
         total = int(self.pomodoro_remaining)
         self.display.set_time(
