@@ -4,20 +4,23 @@ A minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap 
 
 ## Features
 
-- Clock mode
-- Stopwatch mode
-- Pomodoro mode
-- Smooth hour/minute flip animation
+- Clock, stopwatch and Pomodoro modes
+- Smooth split-flap animation for hour/minute changes
 - Seconds update without flip animation
-- Frameless draggable window
-- Always on top
+- Frameless draggable desktop widget
+- Always-on-top mode
 - Adjustable opacity
+- Compact mode (double-click or press `C`)
+- Auto-hiding controls for a cleaner desktop look
+- System tray icon; closing the window hides it to tray
 - Persistent window position, size and preferences
-- Custom Pomodoro focus/break durations
+- Pomodoro focus / short break / long break settings
+- Automatic long break every 4 completed focus sessions
 - Keyboard shortcuts:
   - `Space`: start / pause
   - `R`: reset
-- Right-click menu for quick settings
+  - `C`: compact mode
+- Right-click quick settings
 
 ## Tech
 
@@ -35,29 +38,34 @@ python main.py
 
 ## Build Windows EXE
 
+Quick local build:
+
+```text
+build.bat
+```
+
+or manually:
+
 ```bash
 pip install pyinstaller
 pyinstaller --noconfirm --clean --windowed --onefile --name FlipFocus main.py
 ```
 
-The executable will be created in:
+The executable will be created at `dist/FlipFocus.exe`.
 
-```text
-dist/FlipFocus.exe
-```
+## GitHub Actions
+
+Every push to `main` builds a Windows executable and uploads it as an Actions artifact.
+
+Pushing a version tag such as `v0.2.0` also creates a GitHub Release and attaches `FlipFocus.exe`.
 
 ## Planned
 
-- Better physical flip-card animation
-- Tray icon
-- Start with Windows
-- Long break / session counter
-- Optional notification sound
 - Theme presets
-- Compact mode
+- Start with Windows toggle
+- Optional custom notification sounds
 - Lock position
-- Auto-hide controls
-- Release builds through GitHub Actions
+- Installer build
 
 ## License
 
