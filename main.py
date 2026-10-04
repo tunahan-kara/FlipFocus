@@ -1,5 +1,6 @@
 import sys
 import time
+import os
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QEasingCurve, QPropertyAnimation, Property, QRect, QSettings
@@ -196,6 +197,9 @@ class FlipFocus(QWidget):
         self.always_on_top = self.settings.value("always_on_top", True, type=bool)
         self.window_opacity = float(self.settings.value("opacity", 0.94))
         self.compact_mode = self.settings.value("compact_mode", False, type=bool)
+        self.show_seconds = self.settings.value("show_seconds", True, type=bool)
+        self.use_24h = self.settings.value("use_24h", True, type=bool)
+        self.lock_position = self.settings.value("lock_position", False, type=bool)
         self.focus_minutes = int(self.settings.value("focus_minutes", 25))
         self.short_break_minutes = int(self.settings.value("short_break_minutes", 5))
         self.long_break_minutes = int(self.settings.value("long_break_minutes", 15))
@@ -238,7 +242,7 @@ class FlipFocus(QWidget):
 
         self.hover_timer = QTimer(self)
         self.hover_timer.setSingleShot(True)
-        self.hover_timer.setInterval(900)
+        self.hover_timer.setInterval(1200)
         self.hover_timer.timeout.connect(self.hide_controls)
 
         self.apply_compact_mode()
@@ -259,9 +263,9 @@ class FlipFocus(QWidget):
             QPushButton {
                 background: transparent;
                 border: none;
-                color: rgba(245,245,247,0.62);
-                padding: 7px 10px;
-                border-radius: 8px;
+                color: rgba(245,245,247,0.58);
+                padding: 6px 9px;
+                border-radius: 9px;
                 font-size: 12px;
             }
             QPushButton:hover {
@@ -370,7 +374,7 @@ class FlipFocus(QWidget):
 
     def enterEvent(self, event):
         self.show_controls()
-        self.hover_timer.stop()
+        self.hover_timer.start()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
@@ -393,7 +397,7 @@ class FlipFocus(QWidget):
         self.apply_compact_mode()
 
     def apply_compact_mode(self):
-        self.second_card.setVisible(not self.compact_mode)
+        self.second_card.setVisible((not self.compact_mode) and self.show_seconds)
         self.top_bar.setVisible(not self.compact_mode)
         self.bottom_bar.setVisible(not self.compact_mode)
         self.root.setContentsMargins(8 if self.compact_mode else 14, 8 if self.compact_mode else 12,
@@ -436,7 +440,8 @@ class FlipFocus(QWidget):
     def tick(self):
         if self.mode == "clock":
             now = datetime.now()
-            self.hour_card.set_value(now.strftime("%H"), animate=True)
+            hour_fmt = "%H" if self.use_24h else "%I"
+            self.hour_card.set_value(now.strftime(hour_fmt), animate=True)
             self.minute_card.set_value(now.strftime("%M"), animate=True)
             self.second_card.set_value(now.strftime("%S"))
             return
@@ -546,6 +551,54 @@ class FlipFocus(QWidget):
             self.update_mode_ui()
             self.tick()
 
+    def toggle_seconds(self):
+        self.show_seconds = not self.show_seconds
+        self.settings.setValue("show_seconds", self.show_seconds)
+        self.second_card.setVisible((not self.compact_mode) and self.show_seconds)
+
+    def toggle_time_format(self):
+        self.use_24h = not self.use_24h
+        self.settings.setValue("use_24h", self.use_24h)
+        self.tick()
+
+    def toggle_lock_position(self):
+        self.lock_position = not self.lock_position
+        self.settings.setValue("lock_position", self.lock_position)
+
+    def startup_enabled(self):
+        if sys.platform != "win32":
+            return False
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ) as key:
+                winreg.QueryValueEx(key, APP_NAME)
+                return True
+        except Exception:
+            return False
+
+    def toggle_startup(self):
+        if sys.platform != "win32":
+            return
+        try:
+            import winreg
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                if self.startup_enabled():
+                    try:
+                        winreg.DeleteValue(key, APP_NAME)
+                    except FileNotFoundError:
+                        pass
+                else:
+                    exe = os.path.abspath(sys.executable)
+                    if getattr(sys, "frozen", False):
+                        command = f'"{exe}"'
+                    else:
+                        script = os.path.abspath(sys.argv[0])
+                        command = f'"{exe}" "{script}"'
+                    winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, command)
+        except Exception:
+            pass
+
     def contextMenuEvent(self, event):
         menu = QMenu(self)
 
@@ -558,6 +611,27 @@ class FlipFocus(QWidget):
         compact_action.setChecked(self.compact_mode)
         compact_action.triggered.connect(self.toggle_compact)
         menu.addAction(compact_action)
+
+        seconds_action = QAction("Show seconds", self, checkable=True)
+        seconds_action.setChecked(self.show_seconds)
+        seconds_action.triggered.connect(self.toggle_seconds)
+        menu.addAction(seconds_action)
+
+        format_action = QAction("24-hour clock", self, checkable=True)
+        format_action.setChecked(self.use_24h)
+        format_action.triggered.connect(self.toggle_time_format)
+        menu.addAction(format_action)
+
+        lock_action = QAction("Lock position", self, checkable=True)
+        lock_action.setChecked(self.lock_position)
+        lock_action.triggered.connect(self.toggle_lock_position)
+        menu.addAction(lock_action)
+
+        if sys.platform == "win32":
+            startup_action = QAction("Start with Windows", self, checkable=True)
+            startup_action.setChecked(self.startup_enabled())
+            startup_action.triggered.connect(self.toggle_startup)
+            menu.addAction(startup_action)
 
         opacity_menu = menu.addMenu("Opacity")
         for pct in (100, 90, 80, 70, 60, 50):
@@ -591,12 +665,16 @@ class FlipFocus(QWidget):
         super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        self.show_controls()
+        self.hover_timer.start()
+        if event.button() == Qt.LeftButton and not self.lock_position:
             self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.LeftButton:
+        self.show_controls()
+        self.hover_timer.start()
+        if event.buttons() & Qt.LeftButton and not self.lock_position:
             self.move(event.globalPosition().toPoint() - self.drag_position)
             event.accept()
 
