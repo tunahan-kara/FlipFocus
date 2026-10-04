@@ -2,40 +2,50 @@ import sys
 import time
 from datetime import datetime
 
-from PySide6.QtCore import (
-    Qt, QTimer, QPoint, QEasingCurve, QPropertyAnimation,
-    Property, QRect, QSettings
-)
-from PySide6.QtGui import QColor, QPainter, QFont, QAction
+from PySide6.QtCore import Qt, QTimer, QPoint, QEasingCurve, QPropertyAnimation, Property, QRect, QSettings
+from PySide6.QtGui import QColor, QPainter, QFont, QAction, QIcon, QPixmap, QLinearGradient
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QLabel, QMenu, QDialog, QFormLayout, QSpinBox,
-    QDialogButtonBox
+    QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QMenu,
+    QDialog, QFormLayout, QSpinBox, QDialogButtonBox, QSystemTrayIcon
 )
-
 
 APP_NAME = "FlipFocus"
 ORG_NAME = "OrcaApps"
 
 
+def make_tray_icon():
+    pix = QPixmap(64, 64)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setBrush(QColor(24, 24, 27))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(6, 6, 52, 52, 13, 13)
+    p.setPen(QColor(245, 245, 247))
+    p.setFont(QFont("Segoe UI Variable Display", 25, QFont.Bold))
+    p.drawText(pix.rect(), Qt.AlignCenter, "F")
+    p.end()
+    return QIcon(pix)
+
+
 class FlipCard(QWidget):
-    """Minimal split-flap-like card. Only animates when value changes."""
+    """Split-flap inspired card with a soft physical flip illusion."""
     def __init__(self, value="00", parent=None):
         super().__init__(parent)
         self._value = value
         self._old_value = value
         self._progress = 1.0
-        self.setMinimumSize(92, 116)
+        self.setMinimumSize(84, 108)
 
         self._anim = QPropertyAnimation(self, b"progress", self)
-        self._anim.setDuration(340)
-        self._anim.setEasingCurve(QEasingCurve.InOutCubic)
+        self._anim.setDuration(420)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
 
     def get_progress(self):
         return self._progress
 
-    def set_progress(self, p):
-        self._progress = float(p)
+    def set_progress(self, value):
+        self._progress = float(value)
         self.update()
 
     progress = Property(float, get_progress, set_progress)
@@ -44,8 +54,10 @@ class FlipCard(QWidget):
         value = str(value).zfill(2)
         if value == self._value:
             return
+
         self._old_value = self._value
         self._value = value
+
         if animate:
             self._anim.stop()
             self._progress = 0.0
@@ -56,63 +68,68 @@ class FlipCard(QWidget):
             self._progress = 1.0
             self.update()
 
+    def _draw_text(self, painter, rect, value, clip=None, opacity=1.0):
+        painter.save()
+        if clip is not None:
+            painter.setClipRect(clip)
+        painter.setOpacity(opacity)
+        painter.setPen(QColor(247, 247, 249))
+        painter.setFont(QFont("Segoe UI Variable Display", 42, QFont.DemiBold))
+        painter.drawText(rect, Qt.AlignCenter, value)
+        painter.restore()
+
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
         r = self.rect().adjusted(2, 2, -2, -2)
-        radius = 12
+        center_y = r.center().y()
+        top = QRect(r.left(), r.top(), r.width(), r.height() // 2)
+        bottom = QRect(r.left(), center_y, r.width(), r.height() // 2)
 
-        p.setBrush(QColor(25, 25, 27, 245))
+        bg = QLinearGradient(r.topLeft(), r.bottomLeft())
+        bg.setColorAt(0.0, QColor(35, 35, 38, 250))
+        bg.setColorAt(1.0, QColor(20, 20, 22, 250))
+        p.setBrush(bg)
         p.setPen(Qt.NoPen)
-        p.drawRoundedRect(r, radius, radius)
+        p.drawRoundedRect(r, 12, 12)
 
-        y = r.center().y()
-        p.setPen(QColor(255, 255, 255, 15))
-        p.drawLine(r.left() + 7, y, r.right() - 7, y)
-
-        font = QFont("Segoe UI Variable Display", 42, QFont.DemiBold)
-        p.setFont(font)
-        p.setPen(QColor(245, 245, 247))
+        p.setPen(QColor(255, 255, 255, 16))
+        p.drawLine(r.left() + 7, center_y, r.right() - 7, center_y)
 
         if self._progress >= 0.999:
-            p.drawText(r, Qt.AlignCenter, self._value)
+            self._draw_text(p, r, self._value)
             return
 
         t = self._progress
-        old_h = max(1, int(r.height() * 0.5 * (1.0 - t)))
-        new_h = max(1, int(r.height() * 0.5 * t))
 
-        bottom = QRect(r.left(), y, r.width(), r.height() // 2)
+        # Lower half already shows incoming value.
+        self._draw_text(p, r, self._value, bottom)
 
-        p.save()
-        p.setClipRect(bottom)
-        p.drawText(r, Qt.AlignCenter, self._value)
-        p.restore()
+        # Old top half folds toward the hinge.
+        old_scale = max(0.02, 1.0 - t)
+        old_h = max(1, int(top.height() * old_scale))
+        old_clip = QRect(top.left(), center_y - old_h, top.width(), old_h)
+        self._draw_text(p, r, self._old_value, old_clip, 1.0 - 0.25 * t)
 
-        if old_h > 1:
-            old_rect = QRect(r.left(), y - old_h, r.width(), old_h)
-            p.save()
-            p.setClipRect(old_rect)
-            p.translate(0, -(r.height()//2 - old_h) * 0.25)
-            p.drawText(r, Qt.AlignCenter, self._old_value)
-            p.restore()
+        # Moving flap shadow makes the hinge feel more physical.
+        shadow_alpha = int(105 * (1.0 - abs(0.5 - t) * 2.0))
+        if shadow_alpha > 0:
+            p.fillRect(QRect(r.left() + 4, center_y - 5, r.width() - 8, 10), QColor(0, 0, 0, shadow_alpha))
 
-        if new_h > 1:
-            new_rect = QRect(r.left(), y - new_h, r.width(), new_h)
-            p.save()
-            p.setClipRect(new_rect)
-            p.translate(0, (r.height()//2 - new_h) * 0.18)
-            p.drawText(r, Qt.AlignCenter, self._value)
-            p.restore()
+        # Incoming top half opens after halfway.
+        reveal = max(0.0, (t - 0.45) / 0.55)
+        if reveal > 0:
+            new_h = max(1, int(top.height() * reveal))
+            new_clip = QRect(top.left(), center_y - new_h, top.width(), new_h)
+            self._draw_text(p, r, self._value, new_clip, 0.72 + 0.28 * reveal)
 
 
 class StaticCard(QWidget):
-    """For seconds: same aesthetic, no flip animation."""
     def __init__(self, value="00", parent=None):
         super().__init__(parent)
         self.value = value
-        self.setMinimumSize(92, 116)
+        self.setMinimumSize(84, 108)
 
     def set_value(self, value):
         value = str(value).zfill(2)
@@ -125,20 +142,23 @@ class StaticCard(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         r = self.rect().adjusted(2, 2, -2, -2)
 
-        p.setBrush(QColor(25, 25, 27, 245))
+        bg = QLinearGradient(r.topLeft(), r.bottomLeft())
+        bg.setColorAt(0.0, QColor(35, 35, 38, 250))
+        bg.setColorAt(1.0, QColor(20, 20, 22, 250))
+        p.setBrush(bg)
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(r, 12, 12)
 
-        p.setPen(QColor(255, 255, 255, 15))
-        p.drawLine(r.left()+7, r.center().y(), r.right()-7, r.center().y())
+        p.setPen(QColor(255, 255, 255, 16))
+        p.drawLine(r.left() + 7, r.center().y(), r.right() - 7, r.center().y())
 
         p.setFont(QFont("Segoe UI Variable Display", 42, QFont.DemiBold))
-        p.setPen(QColor(245, 245, 247))
+        p.setPen(QColor(247, 247, 249))
         p.drawText(r, Qt.AlignCenter, self.value)
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, parent, focus_minutes, short_break_minutes):
+    def __init__(self, parent, focus_minutes, short_break_minutes, long_break_minutes):
         super().__init__(parent)
         self.setWindowTitle("Pomodoro Settings")
         self.setModal(True)
@@ -153,8 +173,13 @@ class SettingsDialog(QDialog):
         self.short_break.setRange(1, 60)
         self.short_break.setValue(short_break_minutes)
 
+        self.long_break = QSpinBox()
+        self.long_break.setRange(1, 90)
+        self.long_break.setValue(long_break_minutes)
+
         layout.addRow("Focus (min)", self.focus)
-        layout.addRow("Break (min)", self.short_break)
+        layout.addRow("Short break (min)", self.short_break)
+        layout.addRow("Long break (min)", self.long_break)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -170,8 +195,10 @@ class FlipFocus(QWidget):
         self.mode = self.settings.value("mode", "clock")
         self.always_on_top = self.settings.value("always_on_top", True, type=bool)
         self.window_opacity = float(self.settings.value("opacity", 0.94))
+        self.compact_mode = self.settings.value("compact_mode", False, type=bool)
         self.focus_minutes = int(self.settings.value("focus_minutes", 25))
         self.short_break_minutes = int(self.settings.value("short_break_minutes", 5))
+        self.long_break_minutes = int(self.settings.value("long_break_minutes", 15))
 
         self.drag_position = QPoint()
         self.stopwatch_running = False
@@ -180,19 +207,20 @@ class FlipFocus(QWidget):
 
         self.pomodoro_running = False
         self.pomodoro_is_break = False
+        self.pomodoro_long_break = False
         self.pomodoro_remaining = self.focus_minutes * 60
         self.pomodoro_last_tick = None
+        self.completed_focus_sessions = 0
 
         self.setWindowTitle(APP_NAME)
-        self.setWindowFlags(
-            Qt.FramelessWindowHint |
-            Qt.Tool |
-            (Qt.WindowStaysOnTopHint if self.always_on_top else Qt.Widget)
-        )
+        self.setWindowIcon(make_tray_icon())
+        self._apply_window_flags()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setWindowOpacity(self.window_opacity)
+        self.setMouseTracking(True)
 
         self.build_ui()
+        self.setup_tray()
 
         size = self.settings.value("size")
         pos = self.settings.value("pos")
@@ -208,7 +236,19 @@ class FlipFocus(QWidget):
         self.timer.timeout.connect(self.tick)
         self.timer.start()
 
+        self.hover_timer = QTimer(self)
+        self.hover_timer.setSingleShot(True)
+        self.hover_timer.setInterval(900)
+        self.hover_timer.timeout.connect(self.hide_controls)
+
+        self.apply_compact_mode()
         self.tick()
+
+    def _apply_window_flags(self):
+        flags = Qt.FramelessWindowHint | Qt.Tool
+        if self.always_on_top:
+            flags |= Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
 
     def build_ui(self):
         self.setStyleSheet("""
@@ -234,11 +274,13 @@ class FlipFocus(QWidget):
             }
         """)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(14, 12, 14, 12)
-        root.setSpacing(8)
+        self.root = QVBoxLayout(self)
+        self.root.setContentsMargins(14, 12, 14, 12)
+        self.root.setSpacing(8)
 
-        mode_row = QHBoxLayout()
+        self.top_bar = QWidget(self)
+        mode_row = QHBoxLayout(self.top_bar)
+        mode_row.setContentsMargins(0, 0, 0, 0)
         mode_row.setSpacing(3)
 
         self.btn_clock = QPushButton("Clock")
@@ -256,10 +298,10 @@ class FlipFocus(QWidget):
 
         self.close_btn = QPushButton("×")
         self.close_btn.setFixedWidth(32)
-        self.close_btn.clicked.connect(self.close)
+        self.close_btn.clicked.connect(self.hide)
         mode_row.addWidget(self.close_btn)
 
-        root.addLayout(mode_row)
+        self.root.addWidget(self.top_bar)
 
         cards = QHBoxLayout()
         cards.setSpacing(8)
@@ -272,15 +314,17 @@ class FlipFocus(QWidget):
         cards.addWidget(self.hour_card, 1)
         cards.addWidget(self.minute_card, 1)
         cards.addWidget(self.second_card, 1)
+        self.root.addLayout(cards)
 
-        root.addLayout(cards)
+        self.bottom_bar = QWidget(self)
+        bottom = QHBoxLayout(self.bottom_bar)
+        bottom.setContentsMargins(0, 0, 0, 0)
 
-        bottom = QHBoxLayout()
         self.status = QLabel("")
         self.status.setStyleSheet("color: rgba(245,245,247,0.48); font-size: 11px; padding-left: 4px;")
-
         self.start_pause_btn = QPushButton("Start")
         self.reset_btn = QPushButton("Reset")
+
         self.start_pause_btn.clicked.connect(self.start_pause)
         self.reset_btn.clicked.connect(self.reset_current)
 
@@ -289,8 +333,75 @@ class FlipFocus(QWidget):
         bottom.addWidget(self.start_pause_btn)
         bottom.addWidget(self.reset_btn)
 
-        root.addLayout(bottom)
+        self.root.addWidget(self.bottom_bar)
         self.update_mode_ui()
+
+    def setup_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray = None
+            return
+
+        self.tray = QSystemTrayIcon(make_tray_icon(), self)
+        tray_menu = QMenu()
+
+        show_action = QAction("Show FlipFocus", self)
+        show_action.triggered.connect(self.show_normal)
+        tray_menu.addAction(show_action)
+
+        tray_menu.addSeparator()
+
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(QApplication.quit)
+        tray_menu.addAction(quit_action)
+
+        self.tray.setContextMenu(tray_menu)
+        self.tray.setToolTip(APP_NAME)
+        self.tray.activated.connect(self.on_tray_activated)
+        self.tray.show()
+
+    def on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.Trigger:
+            self.show_normal()
+
+    def show_normal(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def enterEvent(self, event):
+        self.show_controls()
+        self.hover_timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hover_timer.start()
+        super().leaveEvent(event)
+
+    def show_controls(self):
+        if not self.compact_mode:
+            self.top_bar.show()
+            self.bottom_bar.show()
+
+    def hide_controls(self):
+        if not self.compact_mode:
+            self.top_bar.hide()
+            self.bottom_bar.hide()
+
+    def toggle_compact(self):
+        self.compact_mode = not self.compact_mode
+        self.settings.setValue("compact_mode", self.compact_mode)
+        self.apply_compact_mode()
+
+    def apply_compact_mode(self):
+        self.second_card.setVisible(not self.compact_mode)
+        self.top_bar.setVisible(not self.compact_mode)
+        self.bottom_bar.setVisible(not self.compact_mode)
+        self.root.setContentsMargins(8 if self.compact_mode else 14, 8 if self.compact_mode else 12,
+                                     8 if self.compact_mode else 14, 8 if self.compact_mode else 12)
+        if self.compact_mode:
+            self.resize(max(220, self.width() - 110), 126)
+        else:
+            self.resize(max(380, self.width()), max(180, self.height()))
 
     def set_mode(self, mode):
         self.mode = mode
@@ -302,7 +413,7 @@ class FlipFocus(QWidget):
         for btn, name in [
             (self.btn_clock, "clock"),
             (self.btn_stopwatch, "stopwatch"),
-            (self.btn_pomodoro, "pomodoro")
+            (self.btn_pomodoro, "pomodoro"),
         ]:
             btn.setProperty("active", self.mode == name)
             btn.style().unpolish(btn)
@@ -318,10 +429,8 @@ class FlipFocus(QWidget):
             self.status.setText("space · start/pause   r · reset")
             self.start_pause_btn.setText("Pause" if self.stopwatch_running else "Start")
         else:
-            label = "break" if self.pomodoro_is_break else "focus"
-            self.status.setText(
-                f"{label} · {self.short_break_minutes if self.pomodoro_is_break else self.focus_minutes} min"
-            )
+            phase = "long break" if self.pomodoro_long_break else ("break" if self.pomodoro_is_break else "focus")
+            self.status.setText(f"{phase} · sessions {self.completed_focus_sessions}/4")
             self.start_pause_btn.setText("Pause" if self.pomodoro_running else "Start")
 
     def tick(self):
@@ -338,41 +447,41 @@ class FlipFocus(QWidget):
                 elapsed += time.perf_counter() - self.stopwatch_started_at
 
             total = int(elapsed)
-            h = total // 3600
-            m = (total % 3600) // 60
-            s = total % 60
-            self.hour_card.set_value(h, animate=True)
-            self.minute_card.set_value(m, animate=True)
-            self.second_card.set_value(s)
+            self.hour_card.set_value(total // 3600, animate=True)
+            self.minute_card.set_value((total % 3600) // 60, animate=True)
+            self.second_card.set_value(total % 60)
             return
 
-        if self.mode == "pomodoro":
-            if self.pomodoro_running and self.pomodoro_last_tick is not None:
-                now = time.perf_counter()
-                delta = now - self.pomodoro_last_tick
-                if delta >= 1.0:
-                    dec = int(delta)
-                    self.pomodoro_remaining = max(0, self.pomodoro_remaining - dec)
-                    self.pomodoro_last_tick += dec
+        if self.pomodoro_running and self.pomodoro_last_tick is not None:
+            now = time.perf_counter()
+            delta = now - self.pomodoro_last_tick
+            if delta >= 1.0:
+                dec = int(delta)
+                self.pomodoro_remaining = max(0, self.pomodoro_remaining - dec)
+                self.pomodoro_last_tick += dec
 
-                    if self.pomodoro_remaining <= 0:
-                        QApplication.beep()
-                        self.pomodoro_running = False
-                        self.pomodoro_is_break = not self.pomodoro_is_break
-                        self.pomodoro_remaining = (
-                            self.short_break_minutes * 60
-                            if self.pomodoro_is_break
-                            else self.focus_minutes * 60
-                        )
-                        self.update_mode_ui()
+                if self.pomodoro_remaining <= 0:
+                    QApplication.beep()
+                    self.pomodoro_running = False
+                    self._advance_pomodoro_phase()
+                    self.update_mode_ui()
 
-            total = int(self.pomodoro_remaining)
-            h = total // 3600
-            m = (total % 3600) // 60
-            s = total % 60
-            self.hour_card.set_value(h, animate=True)
-            self.minute_card.set_value(m, animate=True)
-            self.second_card.set_value(s)
+        total = int(self.pomodoro_remaining)
+        self.hour_card.set_value(total // 3600, animate=True)
+        self.minute_card.set_value((total % 3600) // 60, animate=True)
+        self.second_card.set_value(total % 60)
+
+    def _advance_pomodoro_phase(self):
+        if not self.pomodoro_is_break:
+            self.completed_focus_sessions += 1
+            self.pomodoro_is_break = True
+            self.pomodoro_long_break = self.completed_focus_sessions % 4 == 0
+            minutes = self.long_break_minutes if self.pomodoro_long_break else self.short_break_minutes
+            self.pomodoro_remaining = minutes * 60
+        else:
+            self.pomodoro_is_break = False
+            self.pomodoro_long_break = False
+            self.pomodoro_remaining = self.focus_minutes * 60
 
     def start_pause(self):
         if self.mode == "stopwatch":
@@ -399,8 +508,10 @@ class FlipFocus(QWidget):
         elif self.mode == "pomodoro":
             self.pomodoro_running = False
             self.pomodoro_is_break = False
+            self.pomodoro_long_break = False
             self.pomodoro_remaining = self.focus_minutes * 60
             self.pomodoro_last_tick = None
+            self.completed_focus_sessions = 0
 
         self.update_mode_ui()
         self.tick()
@@ -408,10 +519,7 @@ class FlipFocus(QWidget):
     def toggle_top(self, checked):
         self.always_on_top = bool(checked)
         self.settings.setValue("always_on_top", self.always_on_top)
-        flags = Qt.FramelessWindowHint | Qt.Tool
-        if self.always_on_top:
-            flags |= Qt.WindowStaysOnTopHint
-        self.setWindowFlags(flags)
+        self._apply_window_flags()
         self.show()
 
     def set_opacity_percent(self, value):
@@ -420,16 +528,21 @@ class FlipFocus(QWidget):
         self.settings.setValue("opacity", self.window_opacity)
 
     def open_pomodoro_settings(self):
-        dlg = SettingsDialog(self, self.focus_minutes, self.short_break_minutes)
+        dlg = SettingsDialog(self, self.focus_minutes, self.short_break_minutes, self.long_break_minutes)
         if dlg.exec():
             self.focus_minutes = dlg.focus.value()
             self.short_break_minutes = dlg.short_break.value()
+            self.long_break_minutes = dlg.long_break.value()
+
             self.settings.setValue("focus_minutes", self.focus_minutes)
             self.settings.setValue("short_break_minutes", self.short_break_minutes)
+            self.settings.setValue("long_break_minutes", self.long_break_minutes)
 
             if self.mode == "pomodoro" and not self.pomodoro_running:
                 self.pomodoro_is_break = False
+                self.pomodoro_long_break = False
                 self.pomodoro_remaining = self.focus_minutes * 60
+
             self.update_mode_ui()
             self.tick()
 
@@ -440,6 +553,11 @@ class FlipFocus(QWidget):
         top_action.setChecked(self.always_on_top)
         top_action.toggled.connect(self.toggle_top)
         menu.addAction(top_action)
+
+        compact_action = QAction("Compact mode", self, checkable=True)
+        compact_action.setChecked(self.compact_mode)
+        compact_action.triggered.connect(self.toggle_compact)
+        menu.addAction(compact_action)
 
         opacity_menu = menu.addMenu("Opacity")
         for pct in (100, 90, 80, 70, 60, 50):
@@ -460,16 +578,21 @@ class FlipFocus(QWidget):
         menu.addAction(reset_size)
 
         quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(QApplication.quit)
         menu.addAction(quit_action)
 
         menu.exec(event.globalPos())
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.toggle_compact()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.drag_position = (
-                event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            )
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
@@ -486,19 +609,29 @@ class FlipFocus(QWidget):
             self.reset_current()
             event.accept()
             return
+        if event.key() == Qt.Key_C:
+            self.toggle_compact()
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def closeEvent(self, event):
         self.settings.setValue("pos", self.pos())
         self.settings.setValue("size", self.size())
         self.settings.sync()
-        super().closeEvent(event)
+
+        if self.tray is not None and self.tray.isVisible():
+            self.hide()
+            event.ignore()
+        else:
+            event.accept()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
+    app.setQuitOnLastWindowClosed(False)
 
     window = FlipFocus()
     window.show()
