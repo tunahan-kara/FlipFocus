@@ -8,7 +8,7 @@ from PySide6.QtCore import (
     Property, QRect, QSettings, QSize
 )
 from PySide6.QtGui import (
-    QAction, QColor, QFont, QIcon, QLinearGradient,
+    QAction, QColor, QCursor, QFont, QIcon, QLinearGradient,
     QPainter, QPen, QPixmap
 )
 from PySide6.QtWidgets import (
@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 APP_NAME = "FlipFocus"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 ORG_NAME = "OrcaApps"
 
 TR = {
@@ -151,6 +151,17 @@ class ResizeHandle(QWidget):
         p.drawLine(7, 21, 21, 7)
         p.drawLine(12, 21, 21, 12)
         p.end()
+
+    def enterEvent(self, event):
+        self.host._show_resize_handle()
+        self.host.hide_timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if not self.dragging:
+            QTimer.singleShot(90, self.host._hide_resize_handle_if_outside)
+        self.host.hide_timer.start()
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and not self.host.lock_position:
@@ -697,12 +708,8 @@ class FlipFocus(QWidget):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.resizing and not self.resize_handle.dragging:
-            self.resize_hot = False
-            self.setCursor(Qt.ArrowCursor)
-            self.resize_handle.hide()
-            self.update()
-            self.hide_timer.start()
+        self.hide_timer.start()
+        QTimer.singleShot(90, self._hide_resize_handle_if_outside)
         super().leaveEvent(event)
 
     def _position_resize_handle(self):
@@ -712,6 +719,19 @@ class FlipFocus(QWidget):
                 self.height() - self.resize_handle.height() - 3,
             )
             self.resize_handle.raise_()
+
+    def _hide_resize_handle_if_outside(self):
+        if not hasattr(self, "resize_handle"):
+            return
+        if self.resize_handle.dragging or self.resizing:
+            return
+        if self.frameGeometry().contains(QCursor.pos()):
+            self._show_resize_handle()
+            return
+        self.resize_hot = False
+        self.setCursor(Qt.ArrowCursor)
+        self.resize_handle.hide()
+        self.update()
 
     def _show_resize_handle(self):
         if not hasattr(self, "resize_handle"):
@@ -1181,11 +1201,11 @@ class FlipFocus(QWidget):
     def mouseReleaseEvent(self, event):
         if self.resizing and event.button() == Qt.LeftButton:
             self.resizing = False
-            self.host.settings.setValue("window_size", self.host.size())
-            if not self.host.compact_mode:
-                self.host.normal_window_size = self.host.size()
-                self.host.settings.setValue("normal_window_size", self.host.normal_window_size)
-            self.host.hide_timer.start()
+            self.settings.setValue("window_size", self.size())
+            if not self.compact_mode:
+                self.normal_window_size = self.size()
+                self.settings.setValue("normal_window_size", self.normal_window_size)
+            self.hide_timer.start()
             event.accept()
             return
         super().mouseReleaseEvent(event)
