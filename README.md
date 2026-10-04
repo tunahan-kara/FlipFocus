@@ -1,37 +1,40 @@
 # FlipFocus
 
-A minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap inspired aesthetic.
+FlipFocus is a minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap inspired interface.
 
-## Features
+## v0.3
+
+The interface was rebuilt around a cleaner four-card clock layout so every digit flips independently, closer to a real split-flap clock.
+
+### Features
 
 - Clock, stopwatch and Pomodoro modes
-- Smooth split-flap animation for hour/minute changes
-- Seconds update without flip animation
-- Frameless draggable desktop widget
-- Always-on-top mode
-- Adjustable opacity
-- Compact mode (double-click or press `C`)
-- Optional seconds display
-- 12 / 24-hour clock switch
+- Four independent HH:MM split-flap digit cards
+- Two-stage hinge animation with shadows and pivot details
+- Small optional seconds badge
+- Auto-hiding controls so the clock can sit quietly on the desktop
+- Compact mode with double-click or `C`
+- Frameless draggable window
 - Lock-position mode
+- Always-on-top mode
+- 12 / 24-hour clock
+- Adjustable opacity
 - Start with Windows toggle
-- Auto-hiding controls for a cleaner desktop look
-- System tray icon; closing the window hides it to tray
-- Persistent window position, size and preferences
+- System tray support
+- Window position persistence
 - Pomodoro focus / short break / long break settings
-- Automatic long break every 4 completed focus sessions
+- Configurable number of focus rounds before a long break
+- Long break cycle tracking
 - Keyboard shortcuts:
   - `Space`: start / pause
   - `R`: reset
   - `C`: compact mode
+  - `Esc`: hide to tray
 - Right-click quick settings
 
-## Tech
+## Run from source
 
-- Python 3.11+
-- PySide6
-
-## Run
+Requires Python 3.11+.
 
 ```bash
 python -m venv .venv
@@ -40,35 +43,35 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Build Windows EXE
-
-Quick local build:
+## Build Windows EXE locally
 
 ```text
 build.bat
 ```
 
-or manually:
+The executable will be created at:
 
-```bash
-pip install pyinstaller
-pyinstaller --noconfirm --clean --windowed --onefile --name FlipFocus main.py
+```text
+dist/FlipFocus.exe
 ```
-
-The executable will be created at `dist/FlipFocus.exe`.
 
 ## GitHub Actions
 
-Every push to `main` builds a Windows executable and uploads it as an Actions artifact.
+Every push to `main`:
 
-Pushing a version tag such as `v0.2.0` also creates a GitHub Release and attaches `FlipFocus.exe`.
+1. checks that the Python source compiles,
+2. builds `FlipFocus.exe` on Windows,
+3. uploads it as the `FlipFocus-Windows` artifact.
 
-## Planned
+Pushing a tag such as `v0.3.0` also creates a GitHub Release and attaches the executable.
 
-- Theme presets
-- Start with Windows toggle
-- Optional custom notification sounds
-- Installer build
+## Roadmap
+
+- Signed Windows builds
+- Installer
+- Optional notification sounds
+- Additional visual themes
+- More polished Windows startup/install experience
 
 ## License
 
