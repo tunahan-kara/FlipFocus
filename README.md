@@ -1,49 +1,57 @@
-# FlipFocus
+<p align="center">
+  <img src="assets/flipfocus.svg" width="112" alt="FlipFocus logo">
+</p>
 
-FlipFocus is a minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap inspired interface.
+<h1 align="center">FlipFocus</h1>
 
-## v0.4
+<p align="center">
+  Minimal Windows split-flap clock, stopwatch and Pomodoro timer.
+</p>
 
-This update focuses on interaction and physical feel.
+## 1.0
 
-### New in v0.4
+FlipFocus is feature-complete for the first stable release.
 
-- Bottom-right resize handle that appears on hover
-- Free window resizing with sensible minimum/maximum limits
-- Window size persistence
-- Turkish and English interface
-- Language switcher in the right-click menu
-- Reworked split-flap animation:
-  - old top page falls into the hinge,
-  - the new lower page unfolds downward,
-  - moving shadows reinforce the physical drop
-- Small seconds badge stays on the far right
-- Existing compact mode, opacity, tray, always-on-top and Pomodoro features remain
-
-### Features
+### Core features
 
 - Clock, stopwatch and Pomodoro modes
 - Four independent HH:MM split-flap digit cards
 - Downward calendar-style flip animation
 - Small optional seconds badge
-- Auto-hiding controls
-- Hover resize handle
-- Turkish / English language support
+- Turkish / English interface
+- Bottom-right hover resize handle
+- Window size and position persistence
 - Compact mode with double-click or `C`
-- Frameless draggable window
-- Lock-position mode
-- Always-on-top mode
+- Always-on-top and lock-position modes
 - 12 / 24-hour clock
 - Adjustable opacity
 - Start with Windows toggle
 - System tray support
-- Window position and size persistence
-- Configurable Pomodoro cycle
-- Keyboard shortcuts:
-  - `Space`: start / pause
-  - `R`: reset
-  - `C`: compact mode
-  - `Esc`: hide to tray
+- Configurable Pomodoro focus, short break, long break and round count
+- Tray notification when a Pomodoro phase completes
+
+### Close behavior
+
+The close button now behaves like a normal Windows application by default: **X fully exits FlipFocus**.
+
+If you prefer tray behavior, enable **“Çarpıya basınca arka planda çalıştır / Keep running in tray when closed”** from the right-click menu.
+
+`Esc` always hides to the system tray when a tray is available.
+
+### Performance
+
+- Visible UI timer runs at a modest 250 ms interval.
+- Stopwatch timing uses `time.perf_counter()`, so elapsed time remains accurate without constant redraws.
+- When hidden, unnecessary updates stop.
+- A running Pomodoro switches to a low-frequency background timer and still fires its completion notification.
+
+### Windows packaging
+
+The executable has:
+- a dedicated FlipFocus split-flap icon,
+- Windows product/version metadata,
+- a deterministic icon build step,
+- syntax/import checks before packaging.
 
 ## Run from source
 
@@ -62,9 +70,14 @@ python main.py
 build.bat
 ```
 
-## GitHub Actions
+The executable will be created at `dist/FlipFocus.exe`.
 
-Every push to `main` syntax-checks the source, builds `FlipFocus.exe`, and uploads it as the `FlipFocus-Windows` artifact.
+## Keyboard shortcuts
+
+- `Space` — start / pause
+- `R` — reset
+- `C` — compact mode
+- `Esc` — hide to tray
 
 ## License
 
