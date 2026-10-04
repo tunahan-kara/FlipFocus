@@ -2,17 +2,33 @@
 
 FlipFocus is a minimal Windows desktop clock, stopwatch and Pomodoro timer with a split-flap inspired interface.
 
-## v0.3
+## v0.4
 
-The interface was rebuilt around a cleaner four-card clock layout so every digit flips independently, closer to a real split-flap clock.
+This update focuses on interaction and physical feel.
+
+### New in v0.4
+
+- Bottom-right resize handle that appears on hover
+- Free window resizing with sensible minimum/maximum limits
+- Window size persistence
+- Turkish and English interface
+- Language switcher in the right-click menu
+- Reworked split-flap animation:
+  - old top page falls into the hinge,
+  - the new lower page unfolds downward,
+  - moving shadows reinforce the physical drop
+- Small seconds badge stays on the far right
+- Existing compact mode, opacity, tray, always-on-top and Pomodoro features remain
 
 ### Features
 
 - Clock, stopwatch and Pomodoro modes
 - Four independent HH:MM split-flap digit cards
-- Two-stage hinge animation with shadows and pivot details
+- Downward calendar-style flip animation
 - Small optional seconds badge
-- Auto-hiding controls so the clock can sit quietly on the desktop
+- Auto-hiding controls
+- Hover resize handle
+- Turkish / English language support
 - Compact mode with double-click or `C`
 - Frameless draggable window
 - Lock-position mode
@@ -21,16 +37,13 @@ The interface was rebuilt around a cleaner four-card clock layout so every digit
 - Adjustable opacity
 - Start with Windows toggle
 - System tray support
-- Window position persistence
-- Pomodoro focus / short break / long break settings
-- Configurable number of focus rounds before a long break
-- Long break cycle tracking
+- Window position and size persistence
+- Configurable Pomodoro cycle
 - Keyboard shortcuts:
   - `Space`: start / pause
   - `R`: reset
   - `C`: compact mode
   - `Esc`: hide to tray
-- Right-click quick settings
 
 ## Run from source
 
@@ -49,29 +62,9 @@ python main.py
 build.bat
 ```
 
-The executable will be created at:
-
-```text
-dist/FlipFocus.exe
-```
-
 ## GitHub Actions
 
-Every push to `main`:
-
-1. checks that the Python source compiles,
-2. builds `FlipFocus.exe` on Windows,
-3. uploads it as the `FlipFocus-Windows` artifact.
-
-Pushing a tag such as `v0.3.0` also creates a GitHub Release and attaches the executable.
-
-## Roadmap
-
-- Signed Windows builds
-- Installer
-- Optional notification sounds
-- Additional visual themes
-- More polished Windows startup/install experience
+Every push to `main` syntax-checks the source, builds `FlipFocus.exe`, and uploads it as the `FlipFocus-Windows` artifact.
 
 ## License
 
